@@ -1,7 +1,7 @@
 bl_info = {
     "name": "Preview Render Automation",
     "author": "Al Ansari",
-    "version": (0, 0, 1),
+    "version": (0, 0, 2),
     "blender": (4.1),
     "location": "View3D > Sidebar > Preview Render",
     "description": "Automate preview renders with customizable settings.",
@@ -22,8 +22,10 @@ from bpy.props import (
 import math
 
 
+default_output_path = os.path.join('D:', 'projects', 'dailies')
+
+
 def get_hdri_files(self, context):
-    """Dynamically populate the list of HDRI files from the selected directory."""
     scn = context.scene
     settings = scn.preview_render_settings
 
@@ -31,7 +33,6 @@ def get_hdri_files(self, context):
     items = []
 
     if os.path.isdir(hdri_dir):
-        # Use glob to find .hdr and .exr files
         hdri_paths = glob.glob(os.path.join(hdri_dir, '*.hdr')) + glob.glob(os.path.join(hdri_dir, '*.exr'))
         for idx, hdri_path in enumerate(hdri_paths):
             hdri_name = os.path.basename(hdri_path)
@@ -50,7 +51,7 @@ class PreviewRenderSettings(bpy.types.PropertyGroup):
         name="Render Engine",
         items=[
             ('BLENDER_WORKBENCH', "Workbench", ""),
-            ('BLENDER_EEVEE', "Eevee", ""),
+            ('BLENDER_EEVEE_NEXT', "Eevee", ""),
             ('CYCLES', "Cycles", ""),
         ],
         default='BLENDER_WORKBENCH',
@@ -86,7 +87,7 @@ class PreviewRenderSettings(bpy.types.PropertyGroup):
 
     output_path: StringProperty(
         name="Output Path",
-        default="//render_output/",
+        default=default_output_path,
         subtype='DIR_PATH',
     )
 
@@ -153,7 +154,6 @@ class PreviewRenderSettings(bpy.types.PropertyGroup):
         default='NONE',
     )
 
-    # HDRI Settings
     hdri_directory: StringProperty(
         name="HDRI Directory",
         default="",
@@ -248,7 +248,12 @@ class PREVIEWRENDER_OT_start(bpy.types.Operator):
             scene.render.resolution_y = settings.resolution_y
         scene.frame_start = 1
         scene.frame_end = settings.frame_count
-        scene.render.filepath = settings.output_path
+
+        output_dir = bpy.path.abspath(settings.output_path)
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        scene.render.filepath = os.path.join(output_dir, "")
+
 
         if settings.file_format == 'FFMPEG':
             scene.render.image_settings.file_format = 'FFMPEG'
@@ -277,11 +282,11 @@ class PREVIEWRENDER_OT_start(bpy.types.Operator):
         if settings.render_engine == 'BLENDER_WORKBENCH':
             pass
 
-        elif settings.render_engine in {'BLENDER_EEVEE', 'CYCLES'}:
+        elif settings.render_engine in {'BLENDER_EEVEE_NEXT', 'CYCLES'}:
             self.setup_hdri_world(context, settings)
             self.animate_hdri_rotation(context, settings)
 
-            if settings.render_engine == 'BLENDER_EEVEE':
+            if settings.render_engine == 'BLENDER_EEVEE_NEXT':
 
                 scene.eevee.use_gtao = True
 
@@ -330,7 +335,6 @@ class PREVIEWRENDER_OT_start(bpy.types.Operator):
             self.report({'ERROR'}, f"Failed to load HDRI image from {hdri_path}")
             return
 
-        #TODO: Probably should encapsulate this
         links.new(tex_coord_node.outputs['Generated'], mapping_node.inputs['Vector'])
         links.new(mapping_node.outputs['Vector'], env_tex_node.inputs['Vector'])
         links.new(env_tex_node.outputs['Color'], background_node.inputs['Color'])
